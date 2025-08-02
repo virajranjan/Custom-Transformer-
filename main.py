@@ -32,5 +32,19 @@ class positonal_encoding(nn.Module):
     def forward(self, X):
         X=X*(self.pe[:,:X.shape[1],:]).requires_grad(False)
 
+class Normalization(nn.Module):
+    def __init__(self, ep:float =10**-6,)->None:
+        super().__init__()
+        self.ep = ep
+        self.alpha = nn.Parameter(torch.ones(1)) # multiplied
+        self.betta = nn.Parameter(torch.zeros(1)) # added
+    def forward(self ,X):
+        mean = X.mean(dim = -1,keepdim = True)
+        dav = X.std(dim =-1,keepdim = True)
+        return self.alpha*(X-mean)/(dav+self.ep)+self.betta 
 
-print(input_embedding(2,5).embedding)
+input = torch .rand(10)
+norm = Normalization()
+print(input)
+output = norm(input)
+print(output)
