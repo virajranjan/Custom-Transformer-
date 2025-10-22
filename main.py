@@ -54,3 +54,7 @@ class Feed_forward(nn.Module):
     def forward(self,x):
         return self.layer2(self.dropout(torch.relu(self.layer1(x))))
     
+# Multi-head attention  
+class MultiheadAttentionBlock(nn.Module):
+    def __init__(self,):
+        super().__init__()
