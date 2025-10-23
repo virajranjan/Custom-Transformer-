@@ -148,6 +148,7 @@ class DecoderBlock(nn.Module):
         x = self.residual_connection[0](x,lambda x:self.self_attention_block(x,x,x,tgt_mask))
         x = self.residual_connection[1](x, lambda x:self.cross_attention_block(x,encoder_output,encoder_output,src_mask))
         x = self.residual_connection[2](x,self.feed_forward_block)
+        return x
 
 class Decoder(nn.Module):
     def __init__(self, layers:nn.Module)->None:
@@ -155,5 +156,16 @@ class Decoder(nn.Module):
         self.layers = layers
         self.norm = Layer_Normalization
 
-        def forward(self, x ,mask):
-            pass
+        def forward(self, x, encoder_output, src_mask, tgt_mask):
+            for layer in self.layer:
+                x = layer(x,encoder_output, src_mask, tgt_mask)
+            return self.norm(x)
+
+class Projection_layer(nn.Module):
+    def __init__(self, d_model , vocab_size):
+        super().__init__()
+        self.proj = nn.Linear(d_model, vocab_size)
+
+    def forward(self, x):
+        # (batch_size, seq_len, d_model)--> (batch_size, seq_len, vocab_size)
+        return torch.log_softmax(self.proj(x),dim = -1)
