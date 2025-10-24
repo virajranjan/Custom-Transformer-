@@ -156,10 +156,10 @@ class Decoder(nn.Module):
         self.layers = layers
         self.norm = Layer_Normalization
 
-        def forward(self, x, encoder_output, src_mask, tgt_mask):
-            for layer in self.layer:
-                x = layer(x,encoder_output, src_mask, tgt_mask)
-            return self.norm(x)
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        for layer in self.layer:
+            x = layer(x,encoder_output, src_mask, tgt_mask)
+        return self.norm(x)
 
 class Projection_layer(nn.Module):
     def __init__(self, d_model , vocab_size):
@@ -169,3 +169,66 @@ class Projection_layer(nn.Module):
     def forward(self, x):
         # (batch_size, seq_len, d_model)--> (batch_size, seq_len, vocab_size)
         return torch.log_softmax(self.proj(x),dim = -1)
+
+class Transformer(nn.Module):
+    def __init__(self, encoder:Encoder, decoder:Decoder, src_embed : input_embedding, tgt_embed:input_embedding, src_pos_encoding : positonal_encoding, tgt_pos_encoding :positonal_encoding, proj_layer:Projection_layer ):
+        super().__init__()
+        self.encoder = encoder 
+        self.decoder = decoder 
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.src_pos_encoding = src_pos_encoding
+        self.tgt_pos_encoding = tgt_pos_encoding
+        self.proj_layer = proj_layer
+    def encode(self, src, src_mask):
+        src = self.src_embed(src)
+        src = self.src_pos_encoding(src)
+        return self.encoder(src)
+    def decode(self, encoder_output, src_mask, tgt, tgt_mask):
+        tgt = self.tgt_embed(tgt)
+        tgt = self.tgt_pos_encoding(tgt)
+        return self.decoder(tgt, encoder_output,src_mask, tgt_mask)
+    def project(self,x):
+        return self.proj_layer(x)
+    
+def build_transformer(src_vocab_size:int, tgt_vocab_size:int,src_seq_len:int, tgt_seq_len:int, d_model:int=512, N:int =6, h :int=8,dropout:float = 0.1, d_ff:int = 2048 )->Transformer:
+    #create embedding layer
+    src_embedding = input_embedding(d_model, src_vocab_size)
+    tgt_embedding = input_embedding(d_model, tgt_vocab_size)
+
+    #create position encoding 
+    src_pos_encoding = positonal_encoding(d_model, src_seq_len, dropout)
+    tgt_pos_encoding = positonal_encoding(d_model, tgt_seq_len, dropout)
+
+    #create ecnoder blocks 
+    encoder_blocks=[]
+    for _ in range(N):
+        encoder_self_att =MultiheadAttentionBlock(d_model, dropout, h)
+        Feed_forward_block = Feed_forward(d_model, d_ff, h)
+        encoder_block = Encoderblock(encoder_self_att, Feed_forward_block, dropout)
+        encoder_blocks.append(encoder_block)
+
+    #create decoder blocks
+    decoder_blocks = []
+    for _ in range(N):
+        decoder_self_att = MultiheadAttentionBlock(d_model, dropout, h)
+        decoder_cross_att = MultiheadAttentionBlock(d_model, dropout, h)
+        feed_forward_block  = Feed_forward(d_model, d_ff, h)
+        decoder_block = DecoderBlock(decoder_self_att, decoder_cross_att, feed_forward_block, dropout)
+        decoder_blocks.append(decoder_block)
+
+    #create encoer and decoder
+    encoder = Encoder(nn.ModuleList(encoder_blocks))
+    decoder = Decoder(nn.ModuleList(decoder_blocks))
+
+    # create projection layer 
+    proj_layer  = Projection_layer(d_model, tgt_vocab_size)
+
+    #create transformer 
+    transformer = Transformer(encoder, decoder , src_embedding, tgt_embedding, src_pos_encoding, tgt_pos_encoding, proj_layer)
+
+    #innitilaize the parameters
+    for p in transformer.parameters():
+        if p.dim()>1:
+            nn.init.xavier_uniform(p)
+    return transformer
